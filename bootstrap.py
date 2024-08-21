@@ -9,14 +9,14 @@ def w_var(raw_sample, weights, axis=None):
     return np.sum(weights * raw_sample**2, axis=axis) - np.sum(weights * raw_sample, axis=axis)**2
 
 
-def bootstrap(samples, weights, bs_sample_weights=None):
-    n = len(samples)
+def bootstrap(raw_sample, weights, bs_sample_weights=None):
+    n = len(raw_sample)
     pool = mp.Pool()
-    return np.var(pool.starmap(bootstrap_helper, [(samples, weights, bs_sample_weights)]*n))
+    return np.var(pool.starmap(bootstrap_helper, [(raw_sample, weights, bs_sample_weights)]*n))
 
-def bootstrap_helper(samples, weights, bs_sample_weights):
-    n = len(samples)
-    bs_samples = rng.choice(samples, size=n, p=bs_sample_weights)
+def bootstrap_helper(raw_sample, weights, bs_sample_weights):
+    n = len(raw_sample)
+    bs_samples = rng.choice(raw_sample, size=n, p=bs_sample_weights)
     return w_var(bs_samples, weights)
 
 
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # sample_dist = sp.stats.uniform(loc=-2, scale=4)
     # real_dist = sp.stats.uniform(loc=-1, scale=2)
 
-    n = int(1e4)
+    n = int(1e2)
 
     # One raw sample to test bootstrapping
     raw_sample = sample_dist.rvs(size=n, random_state=rng)
