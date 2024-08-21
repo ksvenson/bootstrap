@@ -4,20 +4,38 @@ import multiprocessing as mp
 
 
 rng = np.random.default_rng(seed=628)
+PROCESSES = None
+
+
+def get_sample_weights(sample_dist, real_dist, n):
+    raw_sample = sample_dist.rvs(size=n, random_state=rng)
+    
+    weights = real_dist.pdf(raw_sample) / sample_dist.pdf(raw_sample)
+    weights /= np.sum(weights)
+
+    return raw_sample, weights
+
 
 def w_var(raw_sample, weights, axis=None):
     return np.sum(weights * raw_sample**2, axis=axis) - np.sum(weights * raw_sample, axis=axis)**2
 
 
 def bootstrap(raw_sample, weights, bs_sample_weights=None):
-    n = len(raw_sample)
-    pool = mp.Pool()
-    return np.var(pool.starmap(bootstrap_helper, [(raw_sample, weights, bs_sample_weights)]*n))
+    pool = mp.Pool(processes=PROCESSES)
+    return np.var(pool.starmap(bootstrap_helper, [(raw_sample, weights, bs_sample_weights)]*len(raw_sample)))
 
 def bootstrap_helper(raw_sample, weights, bs_sample_weights):
-    n = len(raw_sample)
-    bs_samples = rng.choice(raw_sample, size=n, p=bs_sample_weights)
+    bs_samples = rng.choice(raw_sample, size=len(raw_sample), p=bs_sample_weights)
     return w_var(bs_samples, weights)
+
+
+def get_var_var(sample_dist, real_dist, n, n_trials):
+    pool = mp.Pool(processes=PROCESSES)
+    return np.var(pool.starmap(get_var_samples_helper, [(sample_dist, real_dist, n)]*n_trials))
+
+def get_var_samples_helper(sample_dist, real_dist, n):
+    raw_sample, weights = get_sample_weights(sample_dist, real_dist, n)
+    return w_var(raw_sample, weights)
 
 
 if __name__ == '__main__':
@@ -29,10 +47,12 @@ if __name__ == '__main__':
     n = int(1e2)
 
     # One raw sample to test bootstrapping
-    raw_sample = sample_dist.rvs(size=n, random_state=rng)
+    raw_sample, weights = get_sample_weights(sample_dist, real_dist, n)
 
-    weights = real_dist.pdf(raw_sample) / sample_dist.pdf(raw_sample)
-    weights /= np.sum(weights)
+    # raw_sample = sample_dist.rvs(size=n, random_state=rng)
+
+    # weights = real_dist.pdf(raw_sample) / sample_dist.pdf(raw_sample)
+    # weights /= np.sum(weights)
 
     var_bar = w_var(raw_sample, weights)
 
@@ -50,12 +70,6 @@ if __name__ == '__main__':
 
     # Many raw samples to estiamte real var var
     n_trials = n
-    raw_sample = sample_dist.rvs(size=(n_trials, n), random_state=rng)
-    
-    weights = real_dist.pdf(raw_sample) / sample_dist.pdf(raw_sample)
-    weights /= np.sum(weights, axis=-1)[:, np.newaxis]
-
-    var_bar = w_var(raw_sample, weights, axis=-1)
-    real_var_var = np.var(var_bar)
+    real_var_var = get_var_var(sample_dist, real_dist, n, n_trials)
     
     print(f'Real var var: {real_var_var}')
