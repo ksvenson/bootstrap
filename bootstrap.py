@@ -17,10 +17,10 @@ import scipy as sp
 import multiprocessing as mp
 import matplotlib.pyplot as plt
 
-rng = np.random.default_rng(seed=628)
+rng = np.random.default_rng(seed=628)  # The better circle constant!
 PROCESSES = None
 AVG_ESTIMATORS = (0, 1)
-VAR_ESTIMATORS = (0, 1, 2)
+VAR_ESTIMATORS = (0, 1, 2, 3)
 FIG_SAVE_OPTIONS = {'bbox_inches': 'tight'}
 LEGEND_OPTIONS = {'bbox_to_anchor': (1.04, 1), 'loc': 'upper left'}
 DISP_DECI = 5
@@ -76,12 +76,15 @@ def w_var(raw_sample, weights, axis=None, estimator=VAR_ESTIMATORS[0]):
     `get_sample_weights`. So far, we have three estimators:
 
     Estimator 0
-    This estimator is proven to be un-biased. I'm not sure there is an intuitive way at arriving at it.
+    This estimator is proven to be unbiased. I'm not sure there is an intuitive way at arriving at it.
 
     Estimator 1
-    Estimates \expval{X^2} - \expval{X}^2 using weights normalized to 1.
+    Same as Estimator 0, but instead normalizes using the sum of weights instead of n.
 
     Estimator 2
+    Estimates \expval{X^2} - \expval{X}^2 using weights normalized to 1.
+
+    Estimator 3
     Estimates \expval{X^2} - \expval{X}^2 using un-normalized weights, and then normalizes with `1/n`.
     """
     if axis:
@@ -91,15 +94,17 @@ def w_var(raw_sample, weights, axis=None, estimator=VAR_ESTIMATORS[0]):
 
     mu_2_bar = np.sum(weights * raw_sample**2, axis=axis)  # Un-normalized estimator for \expval{X^2} if X ~ `real_dist`
     mu_bar = np.sum(weights * raw_sample, axis=axis)  # Un-normalized estimator for \expval{X} if X ~ `real_dist`
+    weight_sum = np.sum(weights, axis=axis)
 
     if estimator == 0:
-        weight_sum = np.sum(weights, axis=axis)
         return (mu_2_bar * weight_sum - mu_bar**2)/(n * (n-1))
     elif estimator == 1:
+        return (mu_2_bar * weight_sum - mu_bar**2) / (weight_sum * (weight_sum - 1))
+    elif estimator == 2:
         norm_weights = weights / np.sum(weights, axis=axis, keepdims=True)
         return np.sum(norm_weights * raw_sample**2, axis=axis) - np.sum(norm_weights * raw_sample, axis=axis)**2
-    elif estimator == 2:
-        return mu_2_bar / n - (mu_bar / n)**2
+    elif estimator == 3:
+        return mu_2_bar / n - (mu_bar / n) ** 2
     else:
         raise ValueError(f'Unknown estimator. Known estimators are {", ".join([str(i) for i in VAR_ESTIMATORS])}.')
 
@@ -141,10 +146,11 @@ def get_var_samples_helper(sample_dist, real_dist, n):
 
 
 if __name__ == '__main__':
-    sample_dist = sp.stats.norm(loc=10, scale=5)
-    real_dist = sp.stats.norm(loc=7, scale=3)
+    sample_dist = sp.stats.norm(loc=12, scale=3)
+    real_dist = sp.stats.norm(loc=0, scale=1)
     # sample_dist = sp.stats.uniform(loc=-2, scale=4)
     # real_dist = sp.stats.uniform(loc=-1, scale=2)
+    diff = np.abs(sample_dist.mean() - real_dist.mean()) / np.sqrt(sample_dist.var())
 
     n = int(1e4)
     n_trials = int(1e4)
@@ -172,7 +178,7 @@ if __name__ == '__main__':
     ax.axvline(x=real_dist.mean(), label=f'Real Average: {real_dist.mean()}', color='Black', linestyle='dashed')
     ax.set(xlabel='Average Estimate', ylabel='Counts', title='Comparison of Weighted Average Estimators\n' + title_helper(sample_dist, real_dist))
     fig.legend(**LEGEND_OPTIONS)
-    fig.savefig('avg_estimator_comparison.svg', **FIG_SAVE_OPTIONS)
+    fig.savefig(f'avg_est_comp_d{diff}.svg', **FIG_SAVE_OPTIONS)
 
     fig, ax = plt.subplots()
     num_bins = get_num_bins(var_estimates)
@@ -180,7 +186,7 @@ if __name__ == '__main__':
     ax.axvline(x=real_dist.var(), label=f'Real Variance: {real_dist.var()}', color='Black', linestyle='dashed')
     ax.set(xlabel='Variance Estimate', ylabel='Counts', title='Comparison of Weighted Variance Estimators\n' + title_helper(sample_dist, real_dist))
     fig.legend(**LEGEND_OPTIONS)    
-    fig.savefig('var_estimator_comparison.svg', **FIG_SAVE_OPTIONS)
+    fig.savefig(f'var_est_comp_d{diff}.svg', **FIG_SAVE_OPTIONS)
 
     # Now we bootstrap
     raw_sample, weights = get_sample_weights(sample_dist, real_dist, n)
@@ -201,4 +207,4 @@ if __name__ == '__main__':
         ax.axvline(x=real_dist.var(), label=f'Real Variance: {real_dist.var()}', color='Black', linestyle='dashed')
         ax.set(xlabel='Variance Estimate', ylabel='Counts', title=f'Comparison of Bootstrap Methods for Estimator {i}\n' + title_helper(sample_dist, real_dist))
         fig.legend(**LEGEND_OPTIONS)    
-        fig.savefig(f'bs_var_comp_e{i}.svg', **FIG_SAVE_OPTIONS)
+        fig.savefig(f'bs_var_comp_e{i}_d{diff}.svg', **FIG_SAVE_OPTIONS)
