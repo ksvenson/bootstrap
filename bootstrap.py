@@ -78,10 +78,10 @@ def w_var(raw_sample, weights, axis=None, estimator=VAR_ESTIMATORS[0]):
     `get_sample_weights`. So far, we have three estimators:
 
     Estimator 0
-    This estimator is proven to be unbiased. I'm not sure there is an intuitive way at arriving at it.
+    Same as Estimator 0, but instead normalizes using the sum of weights instead of n.
 
     Estimator 1
-    Same as Estimator 0, but instead normalizes using the sum of weights instead of n.
+    This estimator is proven to be unbiased. I'm not sure there is an intuitive way at arriving at it.
 
     Estimator 2
     Estimates \expval{X^2} - \expval{X}^2 using weights normalized to 1.
@@ -99,9 +99,9 @@ def w_var(raw_sample, weights, axis=None, estimator=VAR_ESTIMATORS[0]):
     weight_sum = np.sum(weights, axis=axis)
 
     if estimator == 0:
-        return (mu_2_bar * weight_sum - mu_bar**2)/(n * (n-1))
-    elif estimator == 1:
         return (mu_2_bar * weight_sum - mu_bar**2) / (weight_sum * (weight_sum - 1))
+    elif estimator == 1:
+        return (mu_2_bar * weight_sum - mu_bar ** 2) / (n * (n - 1))
     elif estimator == 2:
         norm_weights = weights / np.sum(weights, axis=axis, keepdims=True)
         return np.sum(norm_weights * raw_sample**2, axis=axis) - np.sum(norm_weights * raw_sample, axis=axis)**2
@@ -161,7 +161,7 @@ def get_var_samples_helper(sample_dist, real_dist, n):
 if __name__ == '__main__':
     n = int(1e4)
     n_trials = int(1e4)
-    hist_bound = 0
+    hist_bound = 3
 
     for diff_idx in (3,):
         sample_dist = sp.stats.norm(loc=(diff_idx + 1) * 3, scale=3)
@@ -185,6 +185,8 @@ if __name__ == '__main__':
         np.save('var_estimates', var_estimates)
         avg_avg = np.mean(avg_estimates, axis=-1)
         avg_var = np.mean(var_estimates, axis=-1)
+        var_var = np.var(var_estimates, axis=-1)
+        var_avg = np.var(avg_estimates, axis=-1)
 
         print('-'*100)
         print(f'Real var: {real_dist.var()}')
@@ -193,15 +195,15 @@ if __name__ == '__main__':
 
         fig, ax = plt.subplots()
         num_bins = get_num_bins(avg_estimates)
-        ax.hist(avg_estimates.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(avg_estimates, hist_bound), np.percentile(avg_estimates, 100-hist_bound)), label=[r'$\widehat{' + f'X_{i}' + r'}$' + f'(Err: {round(real_dist.mean() - avg_avg[i], DISP_DECI)})' for i in AVG_ESTIMATORS])
-        ax.axvline(x=real_dist.mean(), label=rf'$\langle X \rangle_p = {real_dist.mean()}', color='Black', linestyle='dashed')
-        ax.set(xlabel='Average Estimate', ylabel='Counts', title='Comparison of Weighted Average Estimators\n' + title_helper(sample_dist, real_dist))
+        ax.hist(avg_estimates.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(avg_estimates, hist_bound), np.percentile(avg_estimates, 100-hist_bound)), label=[r'$\widehat{' + f'X_{i}' + r'}$' + f' (Mean Err: {round(real_dist.mean() - avg_avg[i], DISP_DECI)})' for i in AVG_ESTIMATORS])
+        ax.axvline(x=real_dist.mean(), label=rf'$\langle X \rangle_p$ = {real_dist.mean()}', color='Black', linestyle='dashed')
+        ax.set(xlabel='Mean Estimate', ylabel='Counts', title='Comparison of Weighted Mean Estimators\n' + title_helper(sample_dist, real_dist))
         fig.legend(**LEGEND_OPTIONS)
         fig.savefig(f'avg_est_comp_d{diff}.svg', **FIG_SAVE_OPTIONS)
 
         fig, ax = plt.subplots()
         num_bins = get_num_bins(var_estimates)
-        ax.hist(var_estimates.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(var_estimates, hist_bound), np.percentile(var_estimates, 100-hist_bound)), label=[rf'$E_{i}$ (Err: {round(real_dist.var() - avg_var[i], DISP_DECI)})' for i in VAR_ESTIMATORS])
+        ax.hist(var_estimates.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(var_estimates, hist_bound), np.percentile(var_estimates, 100-hist_bound)), label=[rf'$E_{i}$ (Mean Err: {round(real_dist.var() - avg_var[i], DISP_DECI)})' for i in VAR_ESTIMATORS])
         ax.axvline(x=real_dist.var(), label=f'Real Variance: {real_dist.var()}', color='Black', linestyle='dashed')
         ax.set(xlabel='Variance Estimate', ylabel='Counts', title='Comparison of Weighted Variance Estimators\n' + title_helper(sample_dist, real_dist))
         fig.legend(**LEGEND_OPTIONS)
@@ -219,11 +221,11 @@ if __name__ == '__main__':
             fig, ax = plt.subplots()
             num_bins = get_num_bins(data)
             ax.hist(data.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(data, hist_bound), np.percentile(data, 100-hist_bound)), label=
-            (f'Manual Distribution (Err: {round(real_dist.mean() - avg_var[i], DISP_DECI)})',
-             f'Uniform Bootstrap (Err: {round(real_dist.mean() - np.mean(uniform), DISP_DECI)})',
-             f'Weighted Bootstrap (Err: {round(real_dist.mean() - np.mean(weighted), DISP_DECI)})'))
+            (f'Manual Distribution',
+             f'Uniform Bootstrap (Var Err: {round(var_avg[i] - np.var(uniform), DISP_DECI)})',
+             f'Weighted Bootstrap (Var Err: {round(var_avg[i] - np.var(weighted), DISP_DECI)})'))
             ax.axvline(x=real_dist.mean(), label=f'Real Mean: {real_dist.mean()}', color='Black', linestyle='dashed')
-            ax.set(xlabel='Mean Estimate', ylabel='Counts', title=rf'Comparison of Bootstrap Methods for Mean $E_{i}$' + '\n' + title_helper(sample_dist, real_dist))
+            ax.set(xlabel='Mean Estimate', ylabel='Counts', title=r'Comparison of Bootstrap Methods Using $\widehat{' + f'X_{i}' + r'}$' + '\n' + title_helper(sample_dist, real_dist))
             fig.legend(**LEGEND_OPTIONS)
             fig.savefig(f'bs_avg_comp_e{i}_d{diff}.svg', **FIG_SAVE_OPTIONS)
 
@@ -238,11 +240,11 @@ if __name__ == '__main__':
             fig, ax = plt.subplots()
             num_bins = get_num_bins(data)
             ax.hist(data.T, histtype='stepfilled', bins=num_bins, alpha=0.5, range=(np.percentile(data, hist_bound), np.percentile(data, 100-hist_bound)), label=
-                    (f'Manual Distribution (Err: {round(real_dist.var() - avg_var[i], DISP_DECI)})',
-                     f'Uniform Bootstrap (Err: {round(real_dist.var() - np.mean(uniform), DISP_DECI)})',
-                     f'Weighted Bootstrap (Err: {round(real_dist.var() - np.mean(weighted), DISP_DECI)})'))
+                    (f'Manual Distribution',
+                     f'Uniform Bootstrap (Var Err: {round(var_var[i] - np.var(uniform), DISP_DECI)})',
+                     f'Weighted Bootstrap (Var Err: {round(var_var[i] - np.var(weighted), DISP_DECI)})'))
             ax.axvline(x=real_dist.var(), label=f'Real Variance: {real_dist.var()}', color='Black', linestyle='dashed')
-            ax.set(xlabel='Variance Estimate', ylabel='Counts', title=rf'Comparison of Bootstrap Methods for $E_{i}$' + '\n' + title_helper(sample_dist, real_dist))
+            ax.set(xlabel='Variance Estimate', ylabel='Counts', title=rf'Comparison of Bootstrap Methods Using $E_{i}$' + '\n' + title_helper(sample_dist, real_dist))
             fig.legend(**LEGEND_OPTIONS)
             fig.savefig(f'bs_var_comp_e{i}_d{diff}.svg', **FIG_SAVE_OPTIONS)
         plt.close('all')
